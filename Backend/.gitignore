@@ -1,0 +1,11 @@
+# Node
+node_modules
+
+# Local env
+.env
+.env.local
+.env.*
+
+# Logs
+logs
+*.log
