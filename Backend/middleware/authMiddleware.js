@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
-const JWT_SECRET = process.env.JWT_SECRET || 'sobatnelayan_secret_key'; // Gunakan env variable di production
+const env = require('../config/env');
+const JWT_SECRET = env.JWT_SECRET; // centralized
 
 function authenticateToken(req, res, next) {
     const authHeader = req.headers['authorization'];

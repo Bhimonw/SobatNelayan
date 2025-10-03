@@ -2,8 +2,9 @@ const models = require('../models');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'sobatnelayan_secret_key'; // Use env var in production
-const REFRESH_SECRET = process.env.REFRESH_SECRET || 'sobatnelayan_refresh_secret';
+const env = require('../config/env');
+const JWT_SECRET = env.JWT_SECRET;
+const REFRESH_SECRET = env.REFRESH_SECRET;
 
 // In-memory store for refresh tokens (for demo). Replace with persistent store in production.
 const refreshTokens = new Set();

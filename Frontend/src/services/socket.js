@@ -2,7 +2,7 @@ import { io } from 'socket.io-client'
 
 let socket = null
 
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_API_BASE || 'http://localhost:3000'
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_API_BASE || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000')
 
 export function connectSocket(initialToken) {
     if (socket) return socket
