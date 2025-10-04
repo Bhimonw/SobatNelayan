@@ -2,22 +2,27 @@ import { io } from 'socket.io-client'
 
 let socket = null
 
-// Determine socket base URL: prefer explicit env; otherwise use current window origin in browser.
-// Removed hardcoded 'http://localhost:3000' fallback to avoid accidental prod misconfiguration.
-const SOCKET_URL = (() => {
-  const explicit = import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_API_BASE
-  if (explicit) return explicit
-  if (typeof window !== 'undefined' && window.location && window.location.origin) return window.location.origin
-  throw new Error('Socket URL not configured. Set VITE_SOCKET_URL (or VITE_API_BASE) in environment.')
-})()
+// Determine socket base URL: prefer explicit VITE_SOCKET_URL; else derive from API base or window origin.
+// Accept forms like: https://app.example.com OR https://app.example.com/api (we'll strip trailing /api for socket use if present).
+function deriveSocketBase() {
+    let raw = import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_API_BASE || ''
+    if (!raw && typeof window !== 'undefined' && window.location?.origin) raw = window.location.origin
+    if (!raw) throw new Error('Socket URL not configured. Set VITE_SOCKET_URL or VITE_API_BASE.')
+    // Strip trailing '/api' if present (common pattern when API_BASE is origin + /api)
+    if (/\/api\/?$/.test(raw)) raw = raw.replace(/\/api\/?$/, '')
+    return raw
+}
+const SOCKET_BASE = deriveSocketBase()
+// Optional custom path; must match backend env.SOCKET_PATH
+const SOCKET_PATH = import.meta.env.VITE_SOCKET_PATH || '/socket.io'
 
 export function connectSocket(initialToken) {
     if (socket) return socket
-    // Always provide the freshest token via auth function
-    socket = io(SOCKET_URL, {
-        transports: ['websocket'],
+    socket = io(SOCKET_BASE, {
+        path: SOCKET_PATH,
+        transports: ['websocket', 'polling'], // allow fallback if websocket upgrade blocked
         reconnection: true,
-        reconnectionAttempts: 10,
+        reconnectionAttempts: 15,
         reconnectionDelay: 1000,
         auth: (cb) => {
             try {
@@ -26,6 +31,11 @@ export function connectSocket(initialToken) {
             } catch {
                 cb({ token: initialToken })
             }
+        }
+    })
+    socket.on('connect_error', (err) => {
+        if (err && (err.message?.includes('Authentication') || err.message?.includes('400'))) {
+            console.warn('[socket] connect_error', err.message)
         }
     })
     return socket
@@ -41,7 +51,13 @@ export function disconnectSocket() {
 let publicSocket = null
 export function connectPublicSocket() {
     if (publicSocket) return publicSocket
-    publicSocket = io(SOCKET_URL + '/public', { transports: ['websocket'] })
+    publicSocket = io(SOCKET_BASE + '/public', {
+        path: SOCKET_PATH,
+        transports: ['websocket', 'polling']
+    })
+    publicSocket.on('connect_error', (err) => {
+        console.warn('[public socket] connect_error', err && err.message)
+    })
     return publicSocket
 }
 

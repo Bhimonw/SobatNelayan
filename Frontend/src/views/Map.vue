@@ -162,8 +162,10 @@ async function loadMarkers(map) {
     if (markers.length) {
       if (markers.length === 1) {
         const m = markers[0]
-        const latlng = m.inner.getLatLng()
-        map.setView([latlng.lat, latlng.lng], 14)
+        if (m && m.inner && typeof m.inner.getLatLng === 'function') {
+          const latlng = m.inner.getLatLng()
+          map.setView([latlng.lat, latlng.lng], 14)
+        }
       } else {
         let dbMostRecentOn = 0, dbMostRecentOnMarker = null
         let dbMostRecent = 0, dbMostRecentMarker = null
@@ -213,8 +215,10 @@ async function loadMarkers(map) {
       if (fbMarkers.length) {
         if (fbMarkers.length === 1) {
           const m = fbMarkers[0]
-          const latlng = m.inner.getLatLng()
-          map.setView([latlng.lat, latlng.lng], 14)
+          if (m && m.inner && typeof m.inner.getLatLng === 'function') {
+            const latlng = m.inner.getLatLng()
+            map.setView([latlng.lat, latlng.lng], 14)
+          }
         } else {
           let fbMostRecentOn = 0, fbMostRecentOnMarker = null
           let fbMostRecent = 0, fbMostRecentMarker = null
@@ -349,8 +353,11 @@ onMounted(() => {
           }
         }
         if (targetId && liveMarkers[targetId]) {
-          const pos = liveMarkers[targetId].group.inner.getLatLng()
-          map.setView([pos.lat, pos.lng], MAP_MIN_ZOOM)
+          const targetGroup = liveMarkers[targetId]?.group
+          if (targetGroup && targetGroup.inner && typeof targetGroup.inner.getLatLng === 'function') {
+            const pos = targetGroup.inner.getLatLng()
+            map.setView([pos.lat, pos.lng], MAP_MIN_ZOOM)
+          }
           initialCentered = true
         }
       }
