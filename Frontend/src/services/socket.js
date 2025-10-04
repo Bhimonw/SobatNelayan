@@ -38,6 +38,8 @@ export function connectSocket(initialToken) {
             console.warn('[socket] connect_error', err.message)
         }
     })
+    socket.on('error', (e) => console.warn('[socket] error', e && e.message))
+    socket.on('reconnect_attempt', (n) => { /* verbose trace for debugging */ if (n === 1 || n % 5 === 0) console.debug('[socket] reconnect attempt', n) })
     return socket
 }
 
@@ -58,6 +60,7 @@ export function connectPublicSocket() {
     publicSocket.on('connect_error', (err) => {
         console.warn('[public socket] connect_error', err && err.message)
     })
+    publicSocket.on('error', (e) => console.warn('[public socket] error', e && e.message))
     return publicSocket
 }
 

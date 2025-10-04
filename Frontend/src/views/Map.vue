@@ -388,6 +388,15 @@ onMounted(() => {
   const token = localStorage.getItem('token')
   if (token) {
     socket = connectSocket(token)
+    socket.on('connect', () => { /* optional debug */ })
+    socket.on('connect_error', (e) => {
+      console.warn('[map] auth socket connect_error', e && e.message)
+      // fallback to public if auth fails early
+      try { disconnectSocket() } catch {}
+      try {
+        publicSocket = connectPublicSocket()
+      } catch {}
+    })
     socket.on('liveLocation', (data) => {
       try {
         const { alatId, latitude, longitude, status, ts } = data

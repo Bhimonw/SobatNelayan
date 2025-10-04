@@ -25,19 +25,32 @@ const jwt = require('jsonwebtoken');
 const JWT_SECRET = env.JWT_SECRET; // centralized
 
 io.use((socket, next) => {
-    const token = socket.handshake.auth.token || socket.handshake.query.token;
-    if (!token) {
-        return next(new Error('Authentication error: No token provided'));
+    try {
+        const rawAuth = socket.handshake.auth || {};
+        const token = rawAuth.token || socket.handshake.query.token;
+        if (!token) {
+            console.warn('[socket auth] missing token from', socket.handshake.address, 'ua=', socket.handshake.headers['user-agent']);
+            return next(new Error('Authentication error: No token provided'));
+        }
+        jwt.verify(token, JWT_SECRET, (err, user) => {
+            if (err) {
+                console.warn('[socket auth] invalid token', err.message);
+                return next(new Error('Authentication error: Invalid token'));
+            }
+            socket.user = user;
+            next();
+        });
+    } catch (e) {
+        console.error('[socket auth] unexpected error', e.message || e);
+        return next(new Error('Authentication error'));
     }
-    jwt.verify(token, JWT_SECRET, (err, user) => {
-        if (err) return next(new Error('Authentication error: Invalid token'));
-        socket.user = user;
-        next();
-    });
 });
 
 io.on('connection', (socket) => {
-    console.log('Client connected:', socket.id, 'User:', socket.user.username);
+    console.log('[socket] connected id=', socket.id, 'user=', socket.user && socket.user.username, 'ip=', socket.handshake.address);
+    socket.on('disconnect', (reason) => {
+        console.log('[socket] disconnected id=', socket.id, 'reason=', reason);
+    });
     // Contoh emit event
     // socket.emit('liveLocation', { alatId: 'alat1', latitude: -6.2, longitude: 106.8 });
 });
@@ -45,8 +58,8 @@ io.on('connection', (socket) => {
 // Public namespace: no auth required, useful for map viewers that don't have tokens
 const publicNs = io.of('/public');
 publicNs.on('connection', (socket) => {
-    console.log('Public client connected:', socket.id);
-    socket.on('disconnect', () => console.log('Public client disconnected:', socket.id));
+    console.log('[public socket] connected id=', socket.id, 'ip=', socket.handshake.address);
+    socket.on('disconnect', (reason) => console.log('[public socket] disconnected id=', socket.id, 'reason=', reason));
 });
 
 server.listen(port, () => {
