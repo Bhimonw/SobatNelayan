@@ -22,7 +22,17 @@ const env = {
   FIREBASE_STORAGE_BUCKET: process.env.FIREBASE_STORAGE_BUCKET || null,
   FIREBASE_MESSAGING_SENDER_ID: process.env.FIREBASE_MESSAGING_SENDER_ID || null,
   FIREBASE_APP_ID: process.env.FIREBASE_APP_ID || null,
+  // Freshness heuristic: consider node offline if last-seen older than this (minutes)
+  FIREBASE_OFF_AFTER_MINUTES: process.env.FIREBASE_OFF_AFTER_MINUTES ? Number(process.env.FIREBASE_OFF_AFTER_MINUTES) : 10,
+  // If true, nodes without any timestamp will be assumed OFF. Set to 'false' to preserve legacy behavior.
+  FIREBASE_ASSUME_OFF_IF_NO_TS: process.env.FIREBASE_ASSUME_OFF_IF_NO_TS === 'false' ? false : true,
+  // If device latitude/longitude didn't change within this many milliseconds, mark as OFF (default 10000 ms = 10s)
+  FIREBASE_OFF_IF_NO_MOVE_MS: process.env.FIREBASE_OFF_IF_NO_MOVE_MS ? Number(process.env.FIREBASE_OFF_IF_NO_MOVE_MS) : 10000,
   SOCKET_PATH: process.env.SOCKET_PATH || '/socket.io'
+  ,
+  // Optional buoy coordinates (latitude, longitude). If set, backend can compute nearest alat to this point.
+  BUOY_LAT: process.env.BUOY_LAT ? Number(process.env.BUOY_LAT) : null,
+  BUOY_LON: process.env.BUOY_LON ? Number(process.env.BUOY_LON) : null
 };
 
 module.exports = env;

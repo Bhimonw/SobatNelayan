@@ -29,3 +29,18 @@ export function disconnectSocket() {
     socket.disconnect()
     socket = null
 }
+
+// public (no-auth) socket connection to '/public' namespace
+let publicSocket = null
+export function connectPublicSocket() {
+    if (publicSocket) return publicSocket
+    const url = SOCKET_URL
+    publicSocket = io(url + '/public', { transports: ['websocket'] })
+    return publicSocket
+}
+
+export function disconnectPublicSocket() {
+    if (!publicSocket) return
+    publicSocket.disconnect()
+    publicSocket = null
+}

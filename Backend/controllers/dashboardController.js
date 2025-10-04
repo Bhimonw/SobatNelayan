@@ -64,11 +64,79 @@ async function getDashboardData(req, res) {
             }
         }
 
-        res.json({
-            totalAlat,
-            totalAktif,
-            lokasiTerakhir
-        });
+            // Merge in realtime Firebase nodes (if configured). This supplements DB lokasiTerakhir
+            try {
+                const firebaseService = require('../services/firebaseService');
+                const nodes = await firebaseService.getAllLocations('/');
+                if (nodes && typeof nodes === 'object') {
+                    for (const [nodeId, info] of Object.entries(nodes)) {
+                        // If DB already has a last location for this alatId, keep DB (assumed authoritative)
+                        if (!lokasiTerakhir[nodeId]) {
+                            lokasiTerakhir[nodeId] = {
+                                latitude: info.latitude,
+                                longitude: info.longitude,
+                                status: info.status || null,
+                                // use info.timestamp (Date) if firebaseService provided it, otherwise fall back to info.ts (ms)
+                                timestamp: info.timestamp || (info.ts ? new Date(Number(info.ts)) : null)
+                            };
+                        }
+                    }
+                }
+            } catch (err) {
+                console.warn('Could not merge Firebase locations into dashboard:', err.message || err);
+            }
+
+            // Debug: log merged lokasiTerakhir keys and samples (temporary)
+            try {
+                console.log('Dashboard after merge - lokasiTerakhir count:', Object.keys(lokasiTerakhir).length);
+                const sampleKeys = Object.keys(lokasiTerakhir).slice(0, 10);
+                for (const k of sampleKeys) {
+                    const v = lokasiTerakhir[k];
+                    console.log('  sample', k, { latitude: v.latitude, longitude: v.longitude, status: v.status, timestamp: v.timestamp });
+                }
+            } catch (e) {
+                console.warn('Failed to log lokasiTerakhir debug info:', e && e.message ? e.message : e);
+            }
+
+        // Recompute totals from merged lokasiTerakhir so Firebase-only nodes are counted
+        try {
+            const env = require('../config/env');
+            const now = Date.now();
+            // totalAlat is simply the number of keys in lokasiTerakhir (DB + Firebase merged)
+            const computedTotalAlat = Object.keys(lokasiTerakhir).length;
+            let computedTotalAktif = 0;
+            for (const [id, info] of Object.entries(lokasiTerakhir)) {
+                // Determine if this entry should be considered 'on'
+                const status = info.status ? String(info.status).toLowerCase() : null;
+                const ts = info.timestamp ? (Number(new Date(info.timestamp)) || null) : (info.ts ? Number(info.ts) : null);
+
+                let isOn = false;
+                if (status === 'on') {
+                    // If node explicitly reports 'on', treat it as active even without timestamp
+                    isOn = true;
+                } else if (!status) {
+                    // No explicit status: rely on timestamp freshness or env assumption
+                    if (ts) {
+                        const ageMinutes = (now - Number(ts)) / 1000 / 60;
+                        if (ageMinutes <= (env.FIREBASE_OFF_AFTER_MINUTES || 10)) isOn = true;
+                    } else {
+                        if (!env.FIREBASE_ASSUME_OFF_IF_NO_TS) isOn = true;
+                    }
+                }
+
+                if (isOn) computedTotalAktif += 1;
+            }
+
+            // Overwrite totals with computed values
+            console.log('Dashboard computed totals:', { computedTotalAlat, computedTotalAktif, lokasiCount: Object.keys(lokasiTerakhir).length });
+            res.json({ totalAlat: computedTotalAlat, totalAktif: computedTotalAktif, lokasiTerakhir });
+            return;
+        } catch (totErr) {
+            console.warn('Error computing totals from merged lokasiTerakhir, falling back to DB totals:', totErr && totErr.message ? totErr.message : totErr);
+            // If something goes wrong, fall back to prior behavior
+            res.json({ totalAlat, totalAktif, lokasiTerakhir });
+            return;
+        }
     } catch (err) {
         console.error('getDashboardData error:', err);
         res.status(500).json({ message: 'Error fetching dashboard data', error: err.message });
@@ -255,3 +323,82 @@ async function getTopAlat(req, res) {
     }
 }
 module.exports.getTopAlat = getTopAlat;
+
+// Return parsed Firebase realtime nodes (for dev/inspection)
+async function getFirebaseNodes(req, res) {
+    try {
+        const firebaseService = require('../services/firebaseService');
+        // Use optional query param path (default root)
+        const path = req.query.path || '/';
+        const nodes = await firebaseService.getAllLocations(path);
+        res.json({ path, nodes });
+    } catch (err) {
+        console.error('getFirebaseNodes error:', err);
+        res.status(500).json({ message: 'Error reading Firebase nodes', error: err.message });
+    }
+}
+
+module.exports.getFirebaseNodes = getFirebaseNodes;
+
+// Return nearest alat to given latitude/longitude (query params) or to configured BUOY coords
+async function getNearest(req, res) {
+    try {
+        // allow optional query lat/lon; otherwise use configured BUOY
+        const latQ = req.query.lat ? Number(req.query.lat) : null;
+        const lonQ = req.query.lon ? Number(req.query.lon) : null;
+        const env = require('../config/env');
+        const lat = (latQ !== null && !Number.isNaN(latQ)) ? latQ : env.BUOY_LAT;
+        const lon = (lonQ !== null && !Number.isNaN(lonQ)) ? lonQ : env.BUOY_LON;
+        if (lat == null || lon == null) return res.status(400).json({ message: 'lat/lon query params or BUOY_LAT/BUOY_LON must be set' });
+
+        // Build merged lokasiTerakhir similarly to getDashboardData
+        const lokasiTerakhir = {};
+        const alatIds = await db.Livelocation.findAll({ attributes: ['alatId'], group: ['alatId'] });
+        for (const alat of alatIds) {
+            const lastLoc = await db.Livelocation.findOne({ where: { alatId: alat.alatId }, order: [['timestamp', 'DESC']] });
+            if (lastLoc) lokasiTerakhir[alat.alatId] = { latitude: lastLoc.latitude, longitude: lastLoc.longitude, status: lastLoc.status, timestamp: lastLoc.timestamp };
+        }
+        try {
+            const firebaseService = require('../services/firebaseService');
+            const nodes = await firebaseService.getAllLocations('/');
+            if (nodes && typeof nodes === 'object') {
+                for (const [nodeId, info] of Object.entries(nodes)) {
+                    if (!lokasiTerakhir[nodeId] && info.latitude != null && info.longitude != null) {
+                        lokasiTerakhir[nodeId] = { latitude: info.latitude, longitude: info.longitude, status: info.status || null, timestamp: info.timestamp || (info.ts ? new Date(Number(info.ts)) : null) };
+                    }
+                }
+            }
+        } catch (e) {
+            // ignore firebase merge errors
+        }
+
+        // compute nearest using simple haversine
+        function haversine(aLat, aLon, bLat, bLon) {
+            const toRad = (v) => v * Math.PI / 180;
+            const R = 6371000; // meters
+            const dLat = toRad(bLat - aLat);
+            const dLon = toRad(bLon - aLon);
+            const lat1 = toRad(aLat);
+            const lat2 = toRad(bLat);
+            const sinDLat = Math.sin(dLat/2);
+            const sinDLon = Math.sin(dLon/2);
+            const a = sinDLat*sinDLat + sinDLon*sinDLon * Math.cos(lat1) * Math.cos(lat2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c;
+        }
+
+        let best = null;
+        let bestDist = Infinity;
+        for (const [id, loc] of Object.entries(lokasiTerakhir)) {
+            if (loc.latitude == null || loc.longitude == null) continue;
+            const d = haversine(lat, lon, Number(loc.latitude), Number(loc.longitude));
+            if (d < bestDist) { bestDist = d; best = { alatId: id, latitude: Number(loc.latitude), longitude: Number(loc.longitude), status: loc.status, timestamp: loc.timestamp, distanceMeters: d } }
+        }
+        if (!best) return res.status(404).json({ message: 'No alat locations available' });
+        return res.json({ buoy: { lat: lat, lon: lon }, nearest: best });
+    } catch (err) {
+        console.error('getNearest error:', err);
+        res.status(500).json({ message: 'Error computing nearest', error: err.message });
+    }
+}
+module.exports.getNearest = getNearest;

@@ -22,10 +22,14 @@ async function login(req, res) {
     try {
         const user = await models.User.findOne({ where: { username } });
         if (!user) {
+            // Log failed username lookup for debugging (do not log passwords)
+            console.warn(`Login failed: user not found for username="${username}" from ${req.ip}`);
             return res.status(401).json({ message: 'Invalid username or password' });
         }
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) {
+            // Log wrong password attempt for debugging (do not log actual password)
+            console.warn(`Login failed: bad password for username="${username}" from ${req.ip}`);
             return res.status(401).json({ message: 'Invalid username or password' });
         }
         const accessToken = generateAccessToken(user);
