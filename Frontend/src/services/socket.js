@@ -2,7 +2,14 @@ import { io } from 'socket.io-client'
 
 let socket = null
 
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_API_BASE || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000')
+// Determine socket base URL: prefer explicit env; otherwise use current window origin in browser.
+// Removed hardcoded 'http://localhost:3000' fallback to avoid accidental prod misconfiguration.
+const SOCKET_URL = (() => {
+  const explicit = import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_API_BASE
+  if (explicit) return explicit
+  if (typeof window !== 'undefined' && window.location && window.location.origin) return window.location.origin
+  throw new Error('Socket URL not configured. Set VITE_SOCKET_URL (or VITE_API_BASE) in environment.')
+})()
 
 export function connectSocket(initialToken) {
     if (socket) return socket
@@ -34,8 +41,7 @@ export function disconnectSocket() {
 let publicSocket = null
 export function connectPublicSocket() {
     if (publicSocket) return publicSocket
-    const url = SOCKET_URL
-    publicSocket = io(url + '/public', { transports: ['websocket'] })
+    publicSocket = io(SOCKET_URL + '/public', { transports: ['websocket'] })
     return publicSocket
 }
 
