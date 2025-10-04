@@ -28,6 +28,10 @@ const env = {
   FIREBASE_ASSUME_OFF_IF_NO_TS: process.env.FIREBASE_ASSUME_OFF_IF_NO_TS === 'false' ? false : true,
   // If device latitude/longitude didn't change within this many milliseconds, mark as OFF (default 10000 ms = 10s)
   FIREBASE_OFF_IF_NO_MOVE_MS: process.env.FIREBASE_OFF_IF_NO_MOVE_MS ? Number(process.env.FIREBASE_OFF_IF_NO_MOVE_MS) : 10000,
+  // Enable real-time Firebase onValue listener bridge instead of legacy polling ("1" / "true")
+  FIREBASE_USE_LISTENER: (process.env.FIREBASE_USE_LISTENER === '1' || process.env.FIREBASE_USE_LISTENER === 'true') ? true : false,
+  // Interval for watchdog to mark stagnant devices OFF when using listener (ms)
+  OFFLINE_CHECK_INTERVAL_MS: process.env.OFFLINE_CHECK_INTERVAL_MS ? Number(process.env.OFFLINE_CHECK_INTERVAL_MS) : 5000,
   SOCKET_PATH: process.env.SOCKET_PATH || '/socket.io'
   ,
   // Optional buoy coordinates (latitude, longitude). If set, backend can compute nearest alat to this point.
