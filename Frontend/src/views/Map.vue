@@ -3,9 +3,9 @@
     <div class="mx-auto max-w-[1600px]">
       <div class="flex items-center justify-between mb-1">
         <h1 class="text-[22px] sm:text-2xl font-semibold">Map</h1>
-        <p class="text-[11px] sm:text-xs text-slate-600 dark:text-slate-400">Live lokasi alat</p>
+        <p class="text-[11px] sm:text-xs text-slate-600">Live lokasi alat</p>
       </div>
-      <div id="map" class="h-[calc(100vh-56px-56px-16px)] bg-white dark:bg-slate-800 dark:border dark:border-slate-700 rounded-lg shadow"></div>
+      <div id="map" class="h-[calc(100vh-56px-56px-16px)] bg-white rounded-lg shadow"></div>
     </div>
   </div>
   <!-- 56px navbar height, ~56px header/padding, ~16px margins for safe fit -->
@@ -30,42 +30,32 @@
   let socket = null
   let publicSocket = null
   const liveMarkers = {} // id -> { group, meta }
-  const followId = ref(null)
-  const autoFollow = ref(false)
+  // Track the alatId currently being followed (must have status 'on').
+  const currentOnFollowId = ref(null)
+  // viewport tracking padding in pixels
+  const TRACK_PADDING = 120
 
-  function updateLegendDisplay() {
+  function trackViewportIfNeeded(map, lat, lon, forceCenter = false) {
     try {
-      const el = document.getElementById('follow-status')
-      if (el) el.textContent = followId.value ? `Following: ${followId.value}` : 'Not following'
-      const cb = document.getElementById('auto-follow')
-      if (cb) cb.checked = !!autoFollow.value
+      if (!map) return
+      const projected = map.project([lat, lon])
+      const size = map.getSize()
+      const minX = TRACK_PADDING
+      const minY = TRACK_PADDING
+      const maxX = size.x - TRACK_PADDING
+      const maxY = size.y - TRACK_PADDING
+      if (forceCenter) {
+        map.setView([lat, lon], map.getZoom())
+        return
+      }
+      if (projected.x < minX || projected.x > maxX || projected.y < minY || projected.y > maxY) {
+        // use panTo for smoother movement rather than jumpy setView
+        map.panTo([lat, lon], { animate: true })
+      }
     } catch (e) { /* ignore */ }
   }
 
-  function setFollow(id) {
-    followId.value = id
-    // refresh visuals for previous and current markers
-    for (const k of Object.keys(liveMarkers)) {
-      const entry = liveMarkers[k]
-      if (!entry) continue
-      const isFollowed = k === followId.value
-      // recreate marker to update ring/visual
-      const { latitude, longitude, status, ts } = entry.meta
-      upsertMarker(k, latitude, longitude, status, ts, isFollowed)
-    }
-    updateLegendDisplay()
-  }
-
-  function clearFollow() {
-    followId.value = null
-    for (const k of Object.keys(liveMarkers)) {
-      const entry = liveMarkers[k]
-      if (!entry) continue
-      const { latitude, longitude, status, ts } = entry.meta
-      upsertMarker(k, latitude, longitude, status, ts, false)
-    }
-    updateLegendDisplay()
-  }
+  // Follow logic removed: map will always intelligently track latest movements.
 
   async function loadMarkers(map) {
     try {
@@ -79,26 +69,14 @@
             const status = ['on', '1', 'true'].includes(rawStatus) ? 'on' : 'off'
             // try to extract timestamp if backend provided it (ms since epoch or ISO)
             const ts = loc.ts ?? loc.updatedAt ?? loc.lastSeen ?? loc.last_update ?? loc.timestamp ?? null
-            const group = upsertMarker(id, Number(loc.latitude), Number(loc.longitude), status, ts, id === followId.value)
+            const group = upsertMarker(id, Number(loc.latitude), Number(loc.longitude), status, ts, false)
+            // set initial follow target to first 'on' marker if not yet chosen
+            if (status === 'on' && !currentOnFollowId.value) currentOnFollowId.value = id
             markers.push(group)
           }
       if (markers.length) {
         // if auto-follow enabled and no follow chosen, pick best candidate
-        try {
-          if (autoFollow.value && !followId.value) {
-            // prefer most recent online
-            let best = null
-            for (const g of markers) {
-              const id = g.meta?.id
-              if (!id) continue
-              const meta = liveMarkers[id]?.meta
-              const isOn = (meta?.status ?? '').toString().toLowerCase()
-              if (isOn === 'on') { best = id; break }
-            }
-            if (!best && markers.length) best = markers[0]?.meta?.id
-            if (best) setFollow(best)
-          }
-        } catch (e) { /* ignore */ }
+        // (Following removed) We'll center logic below.
         // If only one alat, center map directly to it so user sees it clearly.
         if (markers.length === 1) {
           const m = markers[0]
@@ -126,7 +104,7 @@
             }
           }
           if (dbMostRecentOnMarker && dbMostRecentOn > 0) {
-            map.setView([dbMostRecentOnMarker.lat, dbMostRecentOnMarker.lon], 14)
+              map.setView([dbMostRecentOnMarker.lat, dbMostRecentOnMarker.lon], 14)
           } else if (dbMostRecentMarker && dbMostRecent > 0) {
             map.setView([dbMostRecentMarker.lat, dbMostRecentMarker.lon], 14)
           } else {
@@ -157,24 +135,12 @@
           const status = ['on', '1', 'true'].includes(rawStatus) ? 'on' : 'off'
           if (lat == null || lon == null) continue
           const ts = info.ts ?? info.updatedAt ?? info.lastSeen ?? info.last_update ?? info.timestamp ?? null
-          const grp = upsertMarker(id, Number(lat), Number(lon), status, ts, id === followId.value)
+          const grp = upsertMarker(id, Number(lat), Number(lon), status, ts, false)
+          if (status === 'on' && !currentOnFollowId.value) currentOnFollowId.value = id
           if (grp) fbMarkers.push(grp)
         }
         if (fbMarkers.length) {
-          try {
-            if (autoFollow.value && !followId.value) {
-              let best = null
-              for (const g of fbMarkers) {
-                const id = g.meta?.id
-                if (!id) continue
-                const meta = liveMarkers[id]?.meta
-                const isOn = (meta?.status ?? '').toString().toLowerCase()
-                if (isOn === 'on') { best = id; break }
-              }
-              if (!best && fbMarkers.length) best = fbMarkers[0]?.meta?.id
-              if (best) setFollow(best)
-            }
-          } catch (e) { /* ignore */ }
+          // (Following removed)
           if (fbMarkers.length === 1) {
             const m = fbMarkers[0]
             const latlng = m.inner.getLatLng()
@@ -252,22 +218,12 @@
 
     // choose SVG: pin for online, arrow for offline
     let svg = ''
-    if (status === 'off') {
-      // blue arrow (downwards) for offline devices — clear visual cue
-      const arrowColor = '#2563eb'
-      svg = `
-        <svg width="28" height="28" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-          <path d="M12 2 L20 14 H14 V22 H10 V14 H4 L12 2 Z" fill="${arrowColor}" stroke="#0b1220" stroke-width="0.5" opacity="${dimFactor}"/>
-        </svg>
-      `
-    } else {
-      // pin for online
-      svg = `
-        <svg width="28" height="40" viewBox="0 0 24 40" xmlns="http://www.w3.org/2000/svg">
-          <path d="M12 0C7.03 0 3 4.03 3 9c0 7.5 9 19 9 19s9-11.5 9-19c0-4.97-4.03-9-9-9zm0 12.5A3.5 3.5 0 1 1 12 5.5a3.5 3.5 0 0 1 0 7z" fill="${color}" stroke="#111" stroke-width="0.5" opacity="${dimFactor}"/>
-        </svg>
-      `
-    }
+    // Unified pin shape for both statuses; red when on, blue (dimmed) when off
+    svg = `
+      <svg width="28" height="40" viewBox="0 0 24 40" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 0C7.03 0 3 4.03 3 9c0 7.5 9 19 9 19s9-11.5 9-19c0-4.97-4.03-9-9-9zm0 12.5A3.5 3.5 0 1 1 12 5.5a3.5 3.5 0 0 1 0 7z" fill="${color}" stroke="#111" stroke-width="0.5" opacity="${dimFactor}"/>
+      </svg>
+    `
 
     const icon = L.divIcon({
       className: 'custom-pin-icon',
@@ -328,7 +284,8 @@
   }
 
   onMounted(() => {
-    const map = L.map('map', { zoomControl: true }).setView([-6.2, 106.8], 12)
+  // Start with a neutral global view; we'll reposition once data (markers or nearest) loads
+  const map = L.map('map', { zoomControl: true }).setView([0, 0], 2)
     // expose the map instance so other handlers (socket, etc.) can access it
     mapRef.value = map
     L.control.scale({ imperial: false }).addTo(map)
@@ -346,39 +303,42 @@
       div.innerHTML = `
         <div style="font-size:12px;line-height:1.2;color:#111;background:#fff;padding:8px;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,0.2);">
           <div style="display:flex;align-items:center;margin-bottom:6px;"><svg width="16" height="28" viewBox="0 0 24 40" xmlns="http://www.w3.org/2000/svg"><path d="M12 0C7.03 0 3 4.03 3 9c0 7.5 9 19 9 19s9-11.5 9-19c0-4.97-4.03-9-9-9zm0 12.5A3.5 3.5 0 1 1 12 5.5a3.5 3.5 0 0 1 0 7z" fill="#ef4444" stroke="#111" stroke-width="0.5"/></svg>&nbsp;<strong style="margin-left:6px">Online</strong></div>
-          <div style="display:flex;align-items:center;margin-bottom:6px;"><svg width="16" height="16" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 2 L20 14 H14 V22 H10 V14 H4 L12 2 Z" fill="#2563eb" stroke="#0b1220" stroke-width="0.5" opacity="0.6"/></svg>&nbsp;<strong style="margin-left:6px">Offline</strong></div>
-          <div style="font-size:11px;color:#444;margin-top:4px">Last seen shows time of the last update</div>
-          <hr style="margin:8px 0" />
-          <div style="font-size:12px;margin-top:6px;display:flex;flex-direction:column;gap:6px">
-            <div id="follow-status">Not following</div>
-            <label style="font-size:12px;display:flex;align-items:center;gap:8px"><input id="auto-follow" type="checkbox" /> Auto-follow live updates</label>
-            <div style="display:flex;gap:6px">
-              <button id="follow-first" style="font-size:12px;padding:4px 8px;border-radius:4px;background:#1f2937;color:#fff;border:none">Follow first</button>
-              <button id="clear-follow" style="font-size:12px;padding:4px 8px;border-radius:4px;background:#ef4444;color:#fff;border:none">Clear</button>
-            </div>
-          </div>
+          <div style="display:flex;align-items:center;margin-bottom:2px;"><svg width="16" height="28" viewBox="0 0 24 40" xmlns="http://www.w3.org/2000/svg"><path d="M12 0C7.03 0 3 4.03 3 9c0 7.5 9 19 9 19s9-11.5 9-19c0-4.97-4.03-9-9-9zm0 12.5A3.5 3.5 0 1 1 12 5.5a3.5 3.5 0 0 1 0 7z" fill="#2563eb" stroke="#111" stroke-width="0.5" opacity="0.6"/></svg>&nbsp;<strong style="margin-left:6px">Offline</strong></div>
+          <div style="font-size:11px;color:#444;margin-top:4px">Last seen = waktu terakhir data</div>
         </div>
       `
       return div
     }
     legend.addTo(map)
-    // attach legend interactions
-    setTimeout(() => {
+    let initialCentered = false
+    loadMarkers(map).then(() => {
       try {
-        const btn = document.getElementById('follow-first')
-        const clr = document.getElementById('clear-follow')
-        const cb = document.getElementById('auto-follow')
-        if (btn) btn.addEventListener('click', () => {
-          // pick first liveMarkers key
-          const keys = Object.keys(liveMarkers)
-          if (keys.length) setFollow(keys[0])
-        })
-        if (clr) clr.addEventListener('click', () => clearFollow())
-        if (cb) cb.addEventListener('change', (e) => { autoFollow.value = !!e.target.checked; updateLegendDisplay() })
-        updateLegendDisplay()
+        // If we have any 'on' marker set from load, center to it; otherwise fall back to first marker
+        if (!initialCentered) {
+          let targetId = currentOnFollowId.value
+          if (!targetId) {
+            // choose most recent 'on' if possible
+            let bestTs = 0
+            for (const [id, info] of Object.entries(liveMarkers)) {
+              const meta = info.meta
+              if (meta.status === 'on') {
+                const tsNum = meta.ts ? Number(meta.ts) : 0
+                if (tsNum >= bestTs) { bestTs = tsNum; targetId = id }
+              }
+            }
+            if (!targetId) {
+              const keys = Object.keys(liveMarkers)
+              if (keys.length) targetId = keys[0]
+            }
+          }
+          if (targetId && liveMarkers[targetId]) {
+            const pos = liveMarkers[targetId].group.inner.getLatLng()
+            map.setView([pos.lat, pos.lng], 13)
+            initialCentered = true
+          }
+        }
       } catch (e) { /* ignore */ }
-    }, 0)
-    loadMarkers(map)
+    })
     // If buoy coordinates are configured in environment, ask backend for nearest alat and center map
     try {
       const buoyLat = Number(import.meta.env.VITE_BUOY_LAT || null)
@@ -394,9 +354,10 @@
           if (nearest && nearest.latitude != null && nearest.longitude != null) {
             map.setView([nearest.latitude, nearest.longitude], 14)
             // ensure marker exists/upserted
-            upsertMarker(nearest.alatId, Number(nearest.latitude), Number(nearest.longitude), nearest.status || 'off', nearest.timestamp || null, nearest.alatId === followId.value)
-            // optionally set follow to nearest
-            if (autoFollow.value) setFollow(nearest.alatId)
+            const nearestStatus = (nearest.status || 'off').toString().toLowerCase()
+            const normalizedNearest = ['on','1','true'].includes(nearestStatus) ? 'on' : 'off'
+            upsertMarker(nearest.alatId, Number(nearest.latitude), Number(nearest.longitude), normalizedNearest, nearest.timestamp || null, false)
+            if (normalizedNearest === 'on' && !currentOnFollowId.value) currentOnFollowId.value = nearest.alatId
           }
         } catch (e) {
           // ignore (may be dev or missing endpoint)
@@ -419,16 +380,23 @@
           const rawStatus = (status ?? '').toString().toLowerCase()
           const normalized = ['on', '1', 'true'].includes(rawStatus) ? 'on' : 'off'
           // upsert the marker
-          upsertMarker(alatId, Number(latitude), Number(longitude), normalized, ts, alatId === followId.value)
-          // follow logic: if autoFollow is true or this alat is being followed, center on it
-          try {
-            const mapInstance = mapRef.value
-            if (mapInstance && latitude != null && longitude != null) {
-              if (autoFollow.value || followId.value === alatId) {
-                mapInstance.setView([Number(latitude), Number(longitude)], 14)
-              }
+          upsertMarker(alatId, Number(latitude), Number(longitude), normalized, ts, false)
+          const mapInstance = mapRef.value
+          if (normalized === 'on') {
+            // switch following to this alat
+            currentOnFollowId.value = alatId
+          } else if (currentOnFollowId.value === alatId) {
+            // current followed turned off; find another on device
+            let replacement = null
+            for (const [id, info] of Object.entries(liveMarkers)) {
+              if (id === alatId) continue
+              if (info.meta.status === 'on') { replacement = id; break }
             }
-          } catch (e) { /* ignore */ }
+            currentOnFollowId.value = replacement
+          }
+          if (mapInstance && latitude != null && longitude != null && currentOnFollowId.value === alatId) {
+            trackViewportIfNeeded(mapInstance, Number(latitude), Number(longitude), false)
+          }
         } catch (e) { console.error('socket liveLocation error', e) }
       })
     } else {
@@ -443,15 +411,21 @@
             const { alatId, latitude, longitude, status, ts } = data
             const rawStatus = (status ?? '').toString().toLowerCase()
             const normalized = ['on', '1', 'true'].includes(rawStatus) ? 'on' : 'off'
-            upsertMarker(alatId, Number(latitude), Number(longitude), normalized, ts, alatId === followId.value)
-            try {
-              const mapInstance = mapRef.value
-              if (mapInstance && latitude != null && longitude != null) {
-                if (autoFollow.value || followId.value === alatId) {
-                  mapInstance.setView([Number(latitude), Number(longitude)], 14)
-                }
+            upsertMarker(alatId, Number(latitude), Number(longitude), normalized, ts, false)
+            const mapInstance = mapRef.value
+            if (normalized === 'on') {
+              currentOnFollowId.value = alatId
+            } else if (currentOnFollowId.value === alatId) {
+              let replacement = null
+              for (const [id, info] of Object.entries(liveMarkers)) {
+                if (id === alatId) continue
+                if (info.meta.status === 'on') { replacement = id; break }
               }
-            } catch (e) { /* ignore */ }
+              currentOnFollowId.value = replacement
+            }
+            if (mapInstance && latitude != null && longitude != null && currentOnFollowId.value === alatId) {
+              trackViewportIfNeeded(mapInstance, Number(latitude), Number(longitude), false)
+            }
           } catch (e) { console.error('public socket liveLocation error', e) }
         })
       } catch (e) { console.warn('Could not connect to public socket', e) }
