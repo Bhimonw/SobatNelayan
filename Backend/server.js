@@ -62,8 +62,9 @@ try {
         console.log('Using legacy polling bridge (set FIREBASE_USE_LISTENER=1 to enable real-time listeners)');
         // Keep existing poller for backward compatibility
         const firebaseService = require('./services/firebaseService');
-        let lastSnapshot = {};
-        let lastMoveTs = {};
+    let lastSnapshot = {};
+    let lastMoveTs = {};
+    let lastPersistTs = {};
         const db = require('./models');
         const { Op } = require('sequelize');
         async function pollAndEmit() {
@@ -114,10 +115,16 @@ try {
                         if (!coordsChanged && lastMovedAt && (Date.now() - lastMovedAt) > moveThreshold) effectiveStatus = 'off';
                         const changed = !prev || prev.latitude !== lat || prev.longitude !== lon || String(prev.status) !== String(effectiveStatus) || (prev.ts || null) !== (tsNum || null);
                         if (changed) {
+                            const throttleMs = env.LIVELOCATION_DB_THROTTLE_MS || 0;
+                            const isMinor = prev && prev.latitude === lat && prev.longitude === lon && prev.status === effectiveStatus;
+                            const now = Date.now();
+                            const skipDb = throttleMs > 0 && isMinor && (now - (lastPersistTs[id] || 0)) < throttleMs;
                             lastSnapshot[id] = { latitude: lat, longitude: lon, status: effectiveStatus, ts: tsNum };
                             const payload = { alatId: id, latitude: lat, longitude: lon, status: effectiveStatus, ts: tsNum || null, source: usedDbFallback ? 'db' : 'firebase' };
                             try { io.emit('liveLocation', payload); publicNs.emit('liveLocation', payload); } catch {}
-                            try { await db.Livelocation.create({ alatId: id, latitude: lat, longitude: lon, status: effectiveStatus, timestamp: tsNum ? new Date(tsNum) : new Date() }); } catch (persistErr) { console.warn('Persist failed for', id, persistErr.message || persistErr); }
+                            if (!skipDb) {
+                                try { await db.Livelocation.create({ alatId: id, latitude: lat, longitude: lon, status: effectiveStatus, timestamp: tsNum ? new Date(tsNum) : new Date() }); lastPersistTs[id] = now; } catch (persistErr) { console.warn('Persist failed for', id, persistErr.message || persistErr); }
+                            }
                         }
                     } catch (inner) { console.warn('Error processing firebase node', id, inner && inner.message ? inner.message : inner); }
                 }
@@ -128,6 +135,31 @@ try {
         const POLL_MS = process.env.FIREBASE_POLL_MS ? Number(process.env.FIREBASE_POLL_MS) : 5000;
         setInterval(pollAndEmit, POLL_MS);
         setTimeout(pollAndEmit, 500);
+        // Metrics logging
+        if (env.LIVELOCATION_METRICS_INTERVAL_MS && env.LIVELOCATION_METRICS_INTERVAL_MS > 0) {
+            setInterval(() => {
+                try {
+                    const total = Object.keys(lastSnapshot).length;
+                    let onCount = 0; let offCount = 0;
+                    for (const v of Object.values(lastSnapshot)) { if (v.status === 'on') onCount++; else offCount++; }
+                    console.log(`[poll metrics] total=${total} on=${onCount} off=${offCount}`);
+                } catch {}
+            }, env.LIVELOCATION_METRICS_INTERVAL_MS);
+        }
+        // Retention purge (align with listener retention if enabled)
+        if (env.LIVELOCATION_RETENTION_DAYS && env.LIVELOCATION_RETENTION_DAYS > 0) {
+            const RET_MS = env.LIVELOCATION_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+            setInterval(async () => {
+                try {
+                    const cutoff = new Date(Date.now() - RET_MS);
+                    const { Op } = require('sequelize');
+                    const deleted = await db.Livelocation.destroy({ where: { timestamp: { [Op.lt]: cutoff } } });
+                    if (deleted > 0) console.log(`[poll retention] purged ${deleted} old rows (< ${cutoff.toISOString()})`);
+                } catch (e) {
+                    console.warn('Poll retention purge failed', e.message || e);
+                }
+            }, 60 * 60 * 1000);
+        }
     }
 } catch (e) {
     console.warn('Live location bridge failed to start:', e && e.message ? e.message : e);

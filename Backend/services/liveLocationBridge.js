@@ -29,6 +29,7 @@ let started = false;
 let listenerDb = null;
 let lastSnapshot = {}; // id -> { latitude, longitude, status, ts }
 let lastMoveTs = {};   // id -> epoch ms when movement last detected
+let lastPersistTs = {}; // id -> last DB persist ms for throttle
 
 // Heuristic thresholds
 const MOVE_THRESHOLD = env.FIREBASE_OFF_IF_NO_MOVE_MS || 10000;
@@ -77,12 +78,27 @@ async function persistIfChanged(io, publicNs, id, latitude, longitude, status, t
   const prev = lastSnapshot[id];
   const changed = !prev || prev.latitude !== latitude || prev.longitude !== longitude || String(prev.status) !== String(status) || (prev.ts || null) !== (tsNum || null);
   if (!changed) return;
+  // Throttle DB inserts if configured & only minor change (e.g., status same, coords same but timestamp diff)
+  const throttleMs = env.LIVELOCATION_DB_THROTTLE_MS || 0;
+  if (throttleMs > 0) {
+    const lastP = lastPersistTs[id] || 0;
+    const now = Date.now();
+    const isMinor = prev && prev.latitude === latitude && prev.longitude === longitude && prev.status === status;
+    if (isMinor && (now - lastP) < throttleMs) {
+      // Still update snapshot & emit (so clients see freshness) but skip DB insert
+      lastSnapshot[id] = { latitude, longitude, status, ts: tsNum };
+      const payload = { alatId: id, latitude, longitude, status, ts: tsNum || null, source };
+      try { io.emit('liveLocation', payload); publicNs.emit('liveLocation', payload); } catch {}
+      return;
+    }
+  }
   lastSnapshot[id] = { latitude, longitude, status, ts: tsNum };
   const payload = { alatId: id, latitude, longitude, status, ts: tsNum || null, source };
   try { io.emit('liveLocation', payload); } catch {}
   try { publicNs.emit('liveLocation', payload); } catch {}
   try {
     await dbModels.Livelocation.create({ alatId: id, latitude, longitude, status, timestamp: tsNum ? new Date(tsNum) : new Date() });
+    lastPersistTs[id] = Date.now();
   } catch (e) {
     console.warn('liveLocationBridge DB persist failed for', id, e.message || e);
   }
@@ -153,6 +169,35 @@ function startListener(io, publicNs) {
       }
     } catch (e) { /* ignore */ }
   }, OFFLINE_CHECK_INTERVAL_MS);
+
+  // Metrics logging
+  if (env.LIVELOCATION_METRICS_INTERVAL_MS && env.LIVELOCATION_METRICS_INTERVAL_MS > 0) {
+    setInterval(() => {
+      try {
+        const total = Object.keys(lastSnapshot).length;
+        let onCount = 0; let offCount = 0;
+        for (const v of Object.values(lastSnapshot)) {
+          if (v.status === 'on') onCount++; else offCount++;
+        }
+        console.log(`[liveLocationBridge metrics] total=${total} on=${onCount} off=${offCount}`);
+      } catch {}
+    }, env.LIVELOCATION_METRICS_INTERVAL_MS);
+  }
+
+  // Retention purge (simple: delete rows older than retention days)
+  if (env.LIVELOCATION_RETENTION_DAYS && env.LIVELOCATION_RETENTION_DAYS > 0) {
+    const RET_MS = env.LIVELOCATION_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+    setInterval(async () => {
+      try {
+        const cutoff = new Date(Date.now() - RET_MS);
+        const { Op } = require('sequelize');
+        const deleted = await dbModels.Livelocation.destroy({ where: { timestamp: { [Op.lt]: cutoff } } });
+        if (deleted > 0) console.log(`[liveLocationBridge retention] purged ${deleted} old rows (< ${cutoff.toISOString()})`);
+      } catch (e) {
+        console.warn('Retention purge failed', e.message || e);
+      }
+    }, 60 * 60 * 1000); // hourly
+  }
 }
 
 module.exports = {

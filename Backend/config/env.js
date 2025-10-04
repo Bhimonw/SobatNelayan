@@ -32,6 +32,12 @@ const env = {
   FIREBASE_USE_LISTENER: (process.env.FIREBASE_USE_LISTENER === '1' || process.env.FIREBASE_USE_LISTENER === 'true') ? true : false,
   // Interval for watchdog to mark stagnant devices OFF when using listener (ms)
   OFFLINE_CHECK_INTERVAL_MS: process.env.OFFLINE_CHECK_INTERVAL_MS ? Number(process.env.OFFLINE_CHECK_INTERVAL_MS) : 5000,
+  // Retention days for livelocation history (0 or null to disable purge)
+  LIVELOCATION_RETENTION_DAYS: process.env.LIVELOCATION_RETENTION_DAYS ? Number(process.env.LIVELOCATION_RETENTION_DAYS) : 30,
+  // Minimum ms between DB inserts for the same alat if only timestamp/status noise (0 disables)
+  LIVELOCATION_DB_THROTTLE_MS: process.env.LIVELOCATION_DB_THROTTLE_MS ? Number(process.env.LIVELOCATION_DB_THROTTLE_MS) : 0,
+  // Interval for metrics log (ms, 0 disables)
+  LIVELOCATION_METRICS_INTERVAL_MS: process.env.LIVELOCATION_METRICS_INTERVAL_MS ? Number(process.env.LIVELOCATION_METRICS_INTERVAL_MS) : 60000,
   SOCKET_PATH: process.env.SOCKET_PATH || '/socket.io'
   ,
   // Optional buoy coordinates (latitude, longitude). If set, backend can compute nearest alat to this point.
