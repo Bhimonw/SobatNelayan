@@ -14,12 +14,12 @@
     <div class="flex items-center justify-center">
   <div class="w-full max-w-md bg-white rounded-2xl shadow-xl border border-blue-100 p-8 animate-fadein">
           <div class="flex items-center gap-3 mb-6">
-            <div class="bg-blue-100 p-2 rounded-lg">
-              <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 text-blue-600" viewBox="0 0 24 24" fill="currentColor"><path d="M2.25 19.5l1.591-7.157A2.25 2.25 0 016.05 10.5h11.9a2.25 2.25 0 012.209 1.843L21.75 19.5M2.25 19.5h19.5"/></svg>
+            <div class="p-2 rounded-lg bg-gradient-to-br from-blue-100 to-blue-50 border border-blue-200 shadow-sm">
+              <img src="/Logo.svg" alt="Logo Sobat Nelayan" class="w-10 h-10 object-contain select-none" draggable="false" />
             </div>
-            <div>
-              <h2 class="text-xl font-semibold text-blue-700">Sobat Nelayan</h2>
-              <p class="text-xs text-blue-500">Masuk untuk melihat dashboard dan map</p>
+            <div class="leading-tight">
+              <h2 class="text-xl font-semibold text-blue-700 tracking-tight">Sobat Nelayan</h2>
+              <p class="text-xs text-blue-500">Masuk untuk melihat dashboard & map</p>
             </div>
           </div>
 

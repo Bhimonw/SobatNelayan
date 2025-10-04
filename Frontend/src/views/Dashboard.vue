@@ -6,7 +6,7 @@
           <div class="flex items-end justify-between">
             <div>
               <h1 class="text-2xl font-semibold mb-1">Dashboard</h1>
-              <p class="text-sm text-slate-600 dark:text-slate-400">Statistik dan ringkasan data perikanan.</p>
+              <p class="text-sm text-slate-600 dark:text-slate-400">Statistik dan ringkasan pemantauan pelampung pintar.</p>
             </div>
           </div>
         </div>

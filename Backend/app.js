@@ -2,13 +2,18 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const morgan = require('morgan');
 const cors = require('cors');
+const helmet = require('helmet');
 const cookieParser = require('cookie-parser');
 
 const app = express();
 
 // Middleware
 app.use(morgan('combined'));
-// Enable CORS with sensible defaults. In production, restrict origin as needed.
+// Security headers (fine-tuned; can extend CSP later if needed)
+app.use(helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' }
+}));
+// Enable CORS with sensible defaults. For production, set CORS_ORIGIN explicitly.
 app.use(cors({ origin: true, credentials: true }));
 app.use(bodyParser.json());
 app.use(cookieParser());

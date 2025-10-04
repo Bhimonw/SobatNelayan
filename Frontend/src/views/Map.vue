@@ -1,17 +1,40 @@
 <template>
-  <div class="min-h-[calc(100vh-56px)] p-3 sm:p-4 lg:p-6">
+  <div class="min-h-[calc(100vh-56px)] p-3 sm:p-4 lg:p-6 relative">
     <div class="mx-auto max-w-[1600px]">
-      <div class="flex items-center justify-between mb-1">
-        <h1 class="text-[22px] sm:text-2xl font-semibold">Map</h1>
-        <p class="text-[11px] sm:text-xs text-slate-600">Live lokasi alat</p>
+      <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between mb-1 gap-1">
+        <div>
+          <h1 class="text-[22px] sm:text-2xl font-semibold leading-none">Map</h1>
+          <p class="text-[11px] sm:text-xs text-slate-600">Live lokasi alat</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 text-[11px] sm:text-xs">
+          <span class="px-2 py-[2px] rounded bg-slate-100">Total: <strong>{{ totalCount }}</strong></span>
+          <span class="px-2 py-[2px] rounded bg-red-100 text-red-700">Online: <strong>{{ onlineCount }}</strong></span>
+          <span class="px-2 py-[2px] rounded bg-slate-100">Offline: <strong>{{ offlineCount }}</strong></span>
+          <span v-if="lastDataRefresh" class="px-2 py-[2px] rounded bg-emerald-50 text-emerald-700">Refresh: {{ lastDataRefresh }}</span>
+        </div>
       </div>
-      <div id="map" class="h-[calc(100vh-56px-56px-16px)] bg-white rounded-lg shadow"></div>
+      <div id="map" class="h-[calc(100vh-56px-56px-16px)] bg-white rounded-lg shadow relative overflow-hidden">
+        <!-- Loading Overlay -->
+        <transition name="fade">
+          <div v-if="loading" class="absolute inset-0 z-10 flex flex-col items-center justify-center bg-white/80 backdrop-blur-sm text-slate-600 text-sm">
+            <div class="w-10 h-10 mb-3 border-4 border-red-400 border-t-transparent rounded-full animate-spin"></div>
+            <div>Memuat data lokasi...</div>
+          </div>
+        </transition>
+      </div>
     </div>
+    <!-- Auto-follow toast -->
+    <transition name="slide-up-fade">
+      <div v-if="followToast.visible" class="fixed left-1/2 -translate-x-1/2 bottom-5 z-[999] bg-slate-900 text-white text-xs sm:text-sm px-4 py-2 rounded shadow-lg flex items-center gap-2">
+        <span class="inline-block w-2 h-2 rounded-full" :class="followToast.online ? 'bg-red-400' : 'bg-slate-400'"></span>
+        Mengikuti perangkat: <strong>{{ followToast.id }}</strong>
+      </div>
+    </transition>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import api from '../services/api'
@@ -30,6 +53,79 @@ let socket = null
 let publicSocket = null
 const liveMarkers = {}
 const currentOnFollowId = ref(null)
+const loading = ref(true)
+const onlineCount = ref(0)
+const offlineCount = ref(0)
+const totalCount = ref(0)
+const lastDataRefresh = ref('')
+const followToast = ref({ visible: false, id: null, online: false, timeout: null })
+let popupRefreshInterval = null
+
+function showFollowToast(id, online) {
+  try {
+    if (followToast.value.timeout) clearTimeout(followToast.value.timeout)
+    followToast.value = { visible: true, id, online, timeout: null }
+    followToast.value.timeout = setTimeout(() => { followToast.value.visible = false }, 2500)
+  } catch { /* ignore */ }
+}
+
+function recomputeCounts() {
+  let on = 0; let off = 0; let total = 0
+  for (const info of Object.values(liveMarkers)) {
+    total++
+    if (info.meta.status === 'on') on++; else off++
+  }
+  onlineCount.value = on
+  offlineCount.value = off
+  totalCount.value = total
+  lastDataRefresh.value = new Date().toLocaleTimeString()
+}
+
+function formatRelative(ts) {
+  if (!ts) return 'tidak diketahui'
+  let ms = ts
+  if (typeof ts !== 'number') {
+    const n = Number(ts)
+    if (!Number.isNaN(n)) ms = n
+    else {
+      const d = new Date(ts)
+      if (!isNaN(d)) ms = d.getTime()
+    }
+  }
+  const diff = Date.now() - ms
+  if (diff < 0) return 'baru saja'
+  const sec = Math.floor(diff / 1000)
+  if (sec < 10) return 'baru saja'
+  if (sec < 60) return `${sec}s lalu`
+  const min = Math.floor(sec / 60)
+  if (min < 60) return `${min}m lalu`
+  const hr = Math.floor(min / 60)
+  if (hr < 24) return `${hr}j lalu`
+  const day = Math.floor(hr / 24)
+  return `${day}h lalu`
+}
+
+function buildPopupHtml(id, status, ts) {
+  let absolute = ''
+  let rel = ''
+  if (ts) {
+    let dateObj = null
+    const n = Number(ts)
+    if (!Number.isNaN(n)) dateObj = new Date(n)
+    else {
+      const d = new Date(ts)
+      if (!isNaN(d)) dateObj = d
+    }
+    if (dateObj) {
+      absolute = dateObj.toLocaleString()
+      rel = formatRelative(dateObj.getTime())
+    } else {
+      absolute = ts
+      rel = formatRelative(ts)
+    }
+  }
+  return `<strong>${id}</strong><br/>Status: ${status}<br/>Last seen: ${rel}${absolute ? ' (' + absolute + ')' : ''}`
+}
 
 function trackViewportIfNeeded(map, lat, lon, forceCenter = false) {
   try {
@@ -173,22 +269,7 @@ function createStatusMarker(lat, lon, status, id, ts = null, followed = false) {
   const svg = `\n      <svg width="28" height="40" viewBox="0 0 24 40" xmlns="http://www.w3.org/2000/svg">\n        <path d="M12 0C7.03 0 3 4.03 3 9c0 7.5 9 19 9 19s9-11.5 9-19c0-4.97-4.03-9-9-9zm0 12.5A3.5 3.5 0 1 1 12 5.5a3.5 3.5 0 0 1 0 7z" fill="${color}" stroke="#111" stroke-width="0.5" opacity="${dimFactor}"/>\n      </svg>\n    `
   const icon = L.divIcon({ className: 'custom-pin-icon', html: svg, iconSize: [28, 40], iconAnchor: [14, 40] })
   const inner = L.marker([lat, lon], { icon })
-  let popupHtml = `<strong>${id}</strong><br/>Status: ${status}`
-  if (ts) {
-    let when = ts
-    const n = Number(ts)
-    if (!Number.isNaN(n)) when = new Date(n)
-    else {
-      const d = new Date(ts)
-      if (!isNaN(d)) when = d
-    }
-    if (when instanceof Date && !isNaN(when)) {
-      popupHtml += `<br/>Last seen: ${when.toLocaleString()}`
-    } else {
-      popupHtml += `<br/>Last seen: ${ts}`
-    }
-  }
-  inner.bindPopup(popupHtml)
+  inner.bindPopup(buildPopupHtml(id, status, ts))
   const group = L.layerGroup([outer, inner])
   group.inner = inner
   group.meta = { id, latitude: lat, longitude: lon, status, ts }
@@ -203,7 +284,8 @@ function upsertMarker(id, lat, lon, status, ts = null, followed = false) {
     const grp = createStatusMarker(lat, lon, status, id, ts, followed)
     grp.addTo(mapRef.value)
     liveMarkers[id] = { group: grp, meta: { latitude: lat, longitude: lon, status, ts } }
-    return grp
+  recomputeCounts()
+  return grp
   } catch (e) {
     console.error('upsertMarker error', e)
     return null
@@ -216,6 +298,12 @@ function invalidateSizeSoon(map) {
   window.addEventListener('resize', handler)
   return () => window.removeEventListener('resize', handler)
 }
+
+watch(currentOnFollowId, (newId, oldId) => {
+  if (newId && newId !== oldId && liveMarkers[newId]) {
+    showFollowToast(newId, liveMarkers[newId].meta.status === 'on')
+  }
+})
 
 onMounted(() => {
   const map = L.map('map', { zoomControl: true }).setView([MAP_INITIAL.lat, MAP_INITIAL.lon], MAP_INITIAL.zoom)
@@ -267,6 +355,7 @@ onMounted(() => {
         }
       }
     } catch { /* ignore */ }
+    loading.value = false
   })
   try {
     const buoyLat = Number(import.meta.env.VITE_BUOY_LAT || null)
@@ -297,6 +386,7 @@ onMounted(() => {
         const { alatId, latitude, longitude, status, ts } = data
         const normalized = isOnline(status) ? 'on' : 'off'
         upsertMarker(alatId, Number(latitude), Number(longitude), normalized, ts, false)
+        recomputeCounts()
         const mapInstance = mapRef.value
         if (normalized === 'on') {
           currentOnFollowId.value = alatId
@@ -321,6 +411,7 @@ onMounted(() => {
           const { alatId, latitude, longitude, status, ts } = data
           const normalized = isOnline(status) ? 'on' : 'off'
           upsertMarker(alatId, Number(latitude), Number(longitude), normalized, ts, false)
+          recomputeCounts()
           const mapInstance = mapRef.value
           if (normalized === 'on') {
             currentOnFollowId.value = alatId
@@ -339,10 +430,29 @@ onMounted(() => {
       })
     } catch (e) { console.warn('Could not connect to public socket', e) }
   }
+  // Periodic popup refresh for relative time
+  popupRefreshInterval = setInterval(() => {
+    try {
+      for (const info of Object.values(liveMarkers)) {
+        const { group, meta } = info
+        if (group && group.inner && group.inner.getPopup()) {
+          group.inner.setPopupContent(buildPopupHtml(meta.id, meta.status, meta.ts))
+        }
+      }
+    } catch { /* ignore */ }
+  }, 30000)
 })
 
 onBeforeUnmount(() => {
   try { disconnectSocket() } catch { /* ignore */ }
   try { disconnectPublicSocket() } catch { /* ignore */ }
+  if (popupRefreshInterval) clearInterval(popupRefreshInterval)
 })
 </script>
+
+<style scoped>
+.fade-enter-active, .fade-leave-active { transition: opacity .25s; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
+.slide-up-fade-enter-active, .slide-up-fade-leave-active { transition: all .35s; }
+.slide-up-fade-enter-from, .slide-up-fade-leave-to { opacity: 0; transform: translate(-50%, 12px); }
+</style>

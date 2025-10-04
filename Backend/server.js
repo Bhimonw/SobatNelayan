@@ -7,10 +7,18 @@ const port = env.PORT;
 
 const server = http.createServer(app);
 const { Server } = require('socket.io');
+// Support multiple allowed origins (comma separated) for CORS / Socket.IO
+let allowedOrigins = env.CORS_ORIGIN;
+if (typeof allowedOrigins === 'string' && allowedOrigins.includes(',')) {
+    allowedOrigins = allowedOrigins.split(',').map(o => o.trim()).filter(Boolean);
+}
+if (env.NODE_ENV === 'production' && (allowedOrigins === '*' || (Array.isArray(allowedOrigins) && allowedOrigins.includes('*')))) {
+    console.warn('[SECURITY] CORS_ORIGIN is wildcard in production. Set CORS_ORIGIN to your domain, e.g. https://app.sobatnelayan.id');
+}
+
 const io = new Server(server, {
-    cors: {
-        origin: env.CORS_ORIGIN,
-    }
+    cors: { origin: allowedOrigins, credentials: true },
+    path: env.SOCKET_PATH || '/socket.io'
 });
 
 const jwt = require('jsonwebtoken');
@@ -42,7 +50,7 @@ publicNs.on('connection', (socket) => {
 });
 
 server.listen(port, () => {
-    console.log(`Server is running on http://localhost:${port}`);
+    console.log(`Server is running on http://localhost:${port} (socket path: ${env.SOCKET_PATH || '/socket.io'})`);
 });
 
 // ----------------------------------------------------------------------------
