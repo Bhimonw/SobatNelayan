@@ -345,8 +345,8 @@
       const div = L.DomUtil.create('div', 'map-legend')
       div.innerHTML = `
         <div style="font-size:12px;line-height:1.2;color:#111;background:#fff;padding:8px;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,0.2);">
-          <div style="display:flex;align-items:center;margin-bottom:6px;"><svg width="16" height="22" viewBox="0 0 24 40"><path d="M12 0C7.03 0 3 4.03 3 9c0 7.5 9 19 9 19s9-11.5 9-19c0-4.97-4.03-9-9-9zm0 12.5A3.5 3.5 0 1 1 12 5.5a3.5 3.5 0 0 1 0 7z" fill="#ef4444" stroke="#111" stroke-width="0.5"/></svg>&nbsp;<strong style="margin-left:6px">Online</strong></div>
-          <div style="display:flex;align-items:center;margin-bottom:6px;"><svg width="16" height="22" viewBox="0 0 24 40"><path d="M12 0C7.03 0 3 4.03 3 9c0 7.5 9 19 9 19s9-11.5 9-19c0-4.97-4.03-9-9-9zm0 12.5A3.5 3.5 0 1 1 12 5.5a3.5 3.5 0 0 1 0 7z" fill="#2563eb" stroke="#111" stroke-width="0.5" opacity="0.6"/></svg>&nbsp;<strong style="margin-left:6px">Offline</strong></div>
+          <div style="display:flex;align-items:center;margin-bottom:6px;"><svg width="16" height="28" viewBox="0 0 24 40" xmlns="http://www.w3.org/2000/svg"><path d="M12 0C7.03 0 3 4.03 3 9c0 7.5 9 19 9 19s9-11.5 9-19c0-4.97-4.03-9-9-9zm0 12.5A3.5 3.5 0 1 1 12 5.5a3.5 3.5 0 0 1 0 7z" fill="#ef4444" stroke="#111" stroke-width="0.5"/></svg>&nbsp;<strong style="margin-left:6px">Online</strong></div>
+          <div style="display:flex;align-items:center;margin-bottom:6px;"><svg width="16" height="16" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 2 L20 14 H14 V22 H10 V14 H4 L12 2 Z" fill="#2563eb" stroke="#0b1220" stroke-width="0.5" opacity="0.6"/></svg>&nbsp;<strong style="margin-left:6px">Offline</strong></div>
           <div style="font-size:11px;color:#444;margin-top:4px">Last seen shows time of the last update</div>
           <hr style="margin:8px 0" />
           <div style="font-size:12px;margin-top:6px;display:flex;flex-direction:column;gap:6px">
