@@ -50,7 +50,9 @@ publicNs.on('connection', (socket) => {
 });
 
 server.listen(port, () => {
-    console.log(`Server is running on http://localhost:${port} (socket path: ${env.SOCKET_PATH || '/socket.io'})`);
+    // Prefer explicit PUBLIC_BASE_URL (or ORIGIN) if provided for accurate logging in container/proxy setups
+    const publicBase = process.env.PUBLIC_BASE_URL || process.env.APP_ORIGIN || `http://localhost:${port}`;
+    console.log(`Server is running on ${publicBase} (socket path: ${env.SOCKET_PATH || '/socket.io'})`);
 });
 
 // ----------------------------------------------------------------------------
