@@ -1,56 +1,40 @@
 <template>
-  <div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-100 via-blue-300 to-blue-600 dark:from-slate-900 dark:via-slate-900 dark:to-slate-900 px-4">
+  <div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-100 via-blue-300 to-blue-600 px-4">
     <div class="w-full max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
       <!-- Illustration / branding column (desktop only) -->
       <div class="hidden md:flex flex-col items-center justify-center p-6">
         <div class="w-full max-w-md text-white">
-          <!-- Simple wave + boat illustration -->
-          <svg viewBox="0 0 600 400" class="w-full h-auto drop-shadow-lg mb-6">
-            <defs>
-              <linearGradient id="g1" x1="0" x2="1">
-                <stop offset="0%" stop-color="#60a5fa" />
-                <stop offset="100%" stop-color="#3b82f6" />
-              </linearGradient>
-            </defs>
-            <rect width="600" height="300" rx="24" fill="url(#g1)" />
-            <g transform="translate(60,120)">
-              <path d="M0 60 C60 20, 120 20, 180 60 S300 100, 360 60 S480 20, 540 60" fill="#93c5fd" opacity="0.7" />
-              <g transform="translate(200, -10)">
-                <ellipse cx="40" cy="80" rx="40" ry="12" fill="#1e3a8a" opacity="0.9" />
-                <path d="M10 60 L40 20 L70 60 Z" fill="#f8fafc" />
-              </g>
-            </g>
-          </svg>
-          <h3 class="text-2xl font-bold mb-2">Dashboard Statistik & Map</h3>
-          <p class="text-sm opacity-90">Website monitoring dan live map pelampung pintar</p>
+          <img src="/Login.jpeg" alt="Login Illustration" class="w-full h-auto rounded-xl shadow-lg mb-6 object-cover" />
+          <h3 class="text-2xl font-bold mb-2 drop-shadow">Dashboard Statistik & Map</h3>
+          <p class="text-sm opacity-90 drop-shadow">Website monitoring dan live map pelampung pintar</p>
         </div>
       </div>
 
       <!-- Form column -->
     <div class="flex items-center justify-center">
-  <div class="w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-blue-100 dark:border-slate-800 p-8 animate-fadein">
+  <div class="w-full max-w-md bg-white rounded-2xl shadow-xl border border-blue-100 p-8 animate-fadein">
           <div class="flex items-center gap-3 mb-6">
             <div class="bg-blue-100 p-2 rounded-lg">
               <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 text-blue-600" viewBox="0 0 24 24" fill="currentColor"><path d="M2.25 19.5l1.591-7.157A2.25 2.25 0 016.05 10.5h11.9a2.25 2.25 0 012.209 1.843L21.75 19.5M2.25 19.5h19.5"/></svg>
             </div>
             <div>
-              <h2 class="text-xl font-semibold text-blue-700 dark:text-blue-300">Sobat Nelayan</h2>
-              <p class="text-xs text-blue-500 dark:text-slate-400">Masuk untuk melihat dashboard dan map</p>
+              <h2 class="text-xl font-semibold text-blue-700">Sobat Nelayan</h2>
+              <p class="text-xs text-blue-500">Masuk untuk melihat dashboard dan map</p>
             </div>
           </div>
 
           <form @submit.prevent="handleLogin" class="space-y-4" aria-busy="false">
             <div>
-              <label for="username" class="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Username</label>
-              <input id="username" v-model="username" aria-label="username" class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-400 focus:outline-none shadow-sm bg-slate-50 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 placeholder:text-slate-400" placeholder="username" />
+              <label for="username" class="block text-sm font-medium text-slate-700 mb-1">Username</label>
+              <input id="username" v-model="username" aria-label="username" class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-400 focus:outline-none shadow-sm bg-slate-50 placeholder:text-slate-400" placeholder="username" />
               <p v-if="formErrors.username" class="text-red-500 text-xs mt-1">{{ formErrors.username }}</p>
             </div>
 
             <div>
-              <label for="password" class="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Password</label>
+              <label for="password" class="block text-sm font-medium text-slate-700 mb-1">Password</label>
               <div class="relative">
-                <input :type="showPassword ? 'text' : 'password'" id="password" v-model="password" aria-label="password" class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-400 focus:outline-none shadow-sm bg-slate-50 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 placeholder:text-slate-400" placeholder="password" />
-                <button type="button" @click="showPassword = !showPassword" class="absolute right-2 top-2 text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-300" :aria-pressed="showPassword" :aria-label="showPasswordLabel">
+                <input :type="showPassword ? 'text' : 'password'" id="password" v-model="password" aria-label="password" class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-400 focus:outline-none shadow-sm bg-slate-50 placeholder:text-slate-400" placeholder="password" />
+                <button type="button" @click="showPassword = !showPassword" class="absolute right-2 top-2 text-sm text-slate-500 hover:text-slate-700" :aria-pressed="showPassword" :aria-label="showPasswordLabel">
                   {{ showPassword ? 'Hide' : 'Show' }}
                 </button>
               </div>
@@ -60,7 +44,7 @@
             <div class="flex items-center justify-start gap-2 text-sm">
               <label class="inline-flex items-center gap-2">
                 <input type="checkbox" v-model="rememberMe" class="h-4 w-4 text-blue-600" />
-                <span class="text-slate-600 dark:text-slate-300">Remember me</span>
+                <span class="text-slate-600">Remember me</span>
               </label>
             </div>
 

@@ -13,7 +13,9 @@
             <path fill-rule="evenodd" d="M3 5h14a1 1 0 100-2H3a1 1 0 100 2zm14 4H3a1 1 0 000 2h14a1 1 0 100-2zm0 6H3a1 1 0 000 2h14a1 1 0 100-2z" clip-rule="evenodd" />
           </svg>
         </button>
-        <div class="h-9 w-9 rounded-md bg-blue-600 text-white grid place-items-center font-bold">S</div>
+        <div class="h-9 w-9 rounded-md overflow-hidden flex items-center justify-center">
+          <img src="/Logo.svg" alt="Sobat Nelayan Logo" class="h-9 w-9 object-contain" />
+        </div>
         <div class="leading-tight">
           <h1 class="text-base sm:text-lg font-semibold text-slate-800 leading-tight">Sobat Nelayan</h1>
           <p class="text-[12px] sm:text-[13px] text-slate-500">Monitoring alat & lokasi</p>
